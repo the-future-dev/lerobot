@@ -186,8 +186,18 @@ class DiffusionModel(nn.Module):
             else:
                 self.rgb_encoder = DiffusionRgbEncoder(config)
                 global_cond_dim += self.rgb_encoder.feature_dim * num_images
+
         if self.config.env_state_feature:
-            global_cond_dim += self.config.env_state_feature.shape[0]
+            if self.config.state_backbone is None:
+                global_cond_dim += self.config.env_state_feature.shape[0]
+            elif self.config.state_backbone == "MLP":
+                self.state_encoder = MultiLayerPerceptronEncoder(
+                    in_channels=self.config.env_state_feature.shape[0],
+                    out_channels=self.config.state_encoder_feature_dim,
+                    block_channels=self.config.state_encoder_block_channels,
+                    use_layernorm=self.config.state_encoder_use_layernorm,
+                )
+                global_cond_dim += self.state_encoder.feature_dim
 
         self.unet = DiffusionConditionalUnet1d(config, global_cond_dim=global_cond_dim * config.n_obs_steps)
 
@@ -240,6 +250,7 @@ class DiffusionModel(nn.Module):
         """Encode image features and concatenate them all together along with the state vector."""
         batch_size, n_obs_steps = batch[OBS_ROBOT].shape[:2]
         global_cond_feats = [batch[OBS_ROBOT]]
+
         # Extract image features.
         if self.config.image_features:
             if self.config.use_separate_rgb_encoder_per_camera:
@@ -269,7 +280,19 @@ class DiffusionModel(nn.Module):
             global_cond_feats.append(img_features)
 
         if self.config.env_state_feature:
-            global_cond_feats.append(batch[OBS_ENV])
+            if self.config.state_backbone == "MLP":
+                # Reshape to combine batch and sequence dims for encoder
+                env_state_flat = einops.rearrange(batch[OBS_ENV], "b s ... -> (b s) ...")
+                # Pass through encoder
+                env_features = self.state_encoder(env_state_flat)
+                # Reshape back to separate batch and sequence dims
+                env_features = einops.rearrange(
+                    env_features, "(b s) ... -> b s ...", b=batch_size, s=n_obs_steps
+                )
+                global_cond_feats.append(env_features)
+            else:
+                # Use raw environment state without encoding
+                global_cond_feats.append(batch[OBS_ENV])
 
         # Concatenate features then flatten to (B, global_cond_dim).
         return torch.cat(global_cond_feats, dim=-1).flatten(start_dim=1)
@@ -763,3 +786,49 @@ class DiffusionConditionalResidualBlock1d(nn.Module):
         out = self.conv2(out)
         out = out + self.residual_conv(x)
         return out
+
+
+class MultiLayerPerceptronEncoder(nn.Module):
+    """Encodes input features into a learned representation using an MLP."""
+
+    def __init__(
+        self,
+        in_channels: int = 3,
+        out_channels: int = 1024,
+        block_channels: list[int] = [64, 256],
+        use_layernorm: bool = False,
+    ):
+        """
+        Args:
+            in_channels: Number of input channels
+            out_channels: Number of output channels in final representation
+            block_channels: List of hidden layer dimensions
+            use_layernorm: If True, use LayerNorm instead of ReLU after linear layers
+        """
+        super().__init__()
+
+        layers = []        
+        current_dim = in_channels
+
+        # Build hidden layers
+        for hidden_dim in block_channels:
+            layers.append(nn.Linear(current_dim, hidden_dim))
+            if use_layernorm:
+                layers.append(nn.LayerNorm(hidden_dim))
+            layers.append(nn.ReLU())
+            current_dim = hidden_dim
+            
+        # Final output layer to desired feature dimension
+        layers.append(nn.Linear(current_dim, out_channels))
+        
+        self.mlp = nn.Sequential(*layers)
+        self.feature_dim = out_channels
+
+    def forward(self, x: Tensor) -> Tensor:
+        """
+        Args:
+            x: (B, env_state_dim) environment state tensor.
+        Returns:
+            (B, feature_dim) encoded environment state feature.
+        """
+        return self.mlp(x)

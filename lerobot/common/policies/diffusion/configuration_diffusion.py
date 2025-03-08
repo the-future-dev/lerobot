@@ -101,6 +101,13 @@ class DiffusionConfig(PreTrainedConfig):
         do_mask_loss_for_padding: Whether to mask the loss when there are copy-padded actions. See
             `LeRobotDataset` and `load_previous_and_future_frames` for more information. Note, this defaults
             to False as the original Diffusion Policy implementation does the same.
+        # Environment state encoder parameters
+        state_backbone: Whether to use a backbone for the environment state encoder. Values:
+            - None: No backbone, the environment state is passed directly.
+            - MLP: A simple MLP with `env_encoder_hidden_dims` hidden dimensions and a final linear layer to
+              produce a feature vector of dimension `env_encoder_feature_dim`.
+        state_encoder_hidden_dims: list[int] = field(default_factory=lambda: [256, 256])
+        state_encoder_feature_dim: int = 128
     """
 
     # Inputs / output structure.
@@ -159,6 +166,12 @@ class DiffusionConfig(PreTrainedConfig):
     scheduler_name: str = "cosine"
     scheduler_warmup_steps: int = 500
 
+    # Environment state encoder parameters
+    state_backbone: str = None
+    state_encoder_block_channels: list[int] = field(default_factory=lambda: [64, 256])
+    state_encoder_feature_dim: int = 256
+    state_encoder_use_layernorm: bool = True
+
     def __post_init__(self):
         super().__post_init__()
 
@@ -166,6 +179,12 @@ class DiffusionConfig(PreTrainedConfig):
         if not self.vision_backbone.startswith("resnet"):
             raise ValueError(
                 f"`vision_backbone` must be one of the ResNet variants. Got {self.vision_backbone}."
+            )
+        
+        valid_backbones = ["MLP", None]
+        if not self.state_backbone in valid_backbones:
+            raise ValueError(
+                f"`state_backbone` must be one of {valid_backbones}. Got {self.state_backbone}."
             )
 
         supported_prediction_types = ["epsilon", "sample"]
@@ -215,14 +234,14 @@ class DiffusionConfig(PreTrainedConfig):
                         f"for `crop_shape` and {image_ft.shape} for "
                         f"`{key}`."
                     )
-
-        # Check that all input images have the same shape.
-        first_image_key, first_image_ft = next(iter(self.image_features.items()))
-        for key, image_ft in self.image_features.items():
-            if image_ft.shape != first_image_ft.shape:
-                raise ValueError(
-                    f"`{key}` does not match `{first_image_key}`, but we expect all image shapes to match."
-                )
+        if len(self.image_features) > 0:
+            # Check that all input images have the same shape.
+            first_image_key, first_image_ft = next(iter(self.image_features.items()))
+            for key, image_ft in self.image_features.items():
+                if image_ft.shape != first_image_ft.shape:
+                    raise ValueError(
+                        f"`{key}` does not match `{first_image_key}`, but we expect all image shapes to match."
+                    )
 
     @property
     def observation_delta_indices(self) -> list:

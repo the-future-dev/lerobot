@@ -136,6 +136,11 @@ class DiffusionConfig(PreTrainedConfig):
     use_group_norm: bool = True
     spatial_softmax_num_keypoints: int = 32
     use_separate_rgb_encoder_per_camera: bool = False
+    # State encoder parameters
+    state_backbone: str = None
+    state_encoder_block_channels: list[int] = field(default_factory=lambda: [64, 256])
+    state_encoder_feature_dim: int = 256
+    state_encoder_use_layernorm: bool = True
     # Unet.
     down_dims: tuple[int, ...] = (512, 1024, 2048)
     kernel_size: int = 5
@@ -166,12 +171,6 @@ class DiffusionConfig(PreTrainedConfig):
     scheduler_name: str = "cosine"
     scheduler_warmup_steps: int = 500
 
-    # Environment state encoder parameters
-    state_backbone: str = None
-    state_encoder_block_channels: list[int] = field(default_factory=lambda: [64, 256])
-    state_encoder_feature_dim: int = 256
-    state_encoder_use_layernorm: bool = True
-
     def __post_init__(self):
         super().__post_init__()
 
@@ -181,10 +180,10 @@ class DiffusionConfig(PreTrainedConfig):
                 f"`vision_backbone` must be one of the ResNet variants. Got {self.vision_backbone}."
             )
         
-        valid_backbones = ["MLP", None]
-        if not self.state_backbone in valid_backbones:
+        supported_state_backbones = ["MLP", None]
+        if not self.state_backbone in supported_state_backbones:
             raise ValueError(
-                f"`state_backbone` must be one of {valid_backbones}. Got {self.state_backbone}."
+                f"`state_backbone` must be one of {supported_state_backbones}. Got {self.state_backbone}."
             )
 
         supported_prediction_types = ["epsilon", "sample"]

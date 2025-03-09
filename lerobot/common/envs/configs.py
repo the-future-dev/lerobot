@@ -105,6 +105,8 @@ class PushtEnv(EnvConfig):
             self.features["pixels"] = PolicyFeature(type=FeatureType.VISUAL, shape=(384, 384, 3))
         elif self.obs_type == "environment_state_agent_pos":
             self.features["environment_state"] = PolicyFeature(type=FeatureType.ENV, shape=(16,))
+        elif self.obs_type == "environment_state_agent_pos_privileged":
+            self.features["environment_state"] = PolicyFeature(type=FeatureType.ENV, shape=(32,))
 
     @property
     def gym_kwargs(self) -> dict:

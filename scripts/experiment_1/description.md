@@ -1,0 +1,1 @@
+After simulating the baseline, lets try to add the privileged data: let's insert the endgoal keypoints together with the current observation keypoints and evaluate if there is difference in any training or performance metrics.

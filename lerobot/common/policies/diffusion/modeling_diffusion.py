@@ -210,6 +210,7 @@ class DiffusionModel(nn.Module):
             clip_sample=config.clip_sample,
             clip_sample_range=config.clip_sample_range,
             prediction_type=config.prediction_type,
+            variance_type=config.variance_type,
         )
 
         if config.num_inference_steps is None:

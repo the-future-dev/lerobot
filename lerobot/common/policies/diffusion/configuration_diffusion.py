@@ -16,7 +16,7 @@
 # limitations under the License.
 from dataclasses import dataclass, field
 
-from lerobot.common.optim.optimizers import AdamConfig
+from lerobot.common.optim.optimizers import AdamConfig, AdamWConfig
 from lerobot.common.optim.schedulers import DiffuserSchedulerConfig
 from lerobot.configs.policies import PreTrainedConfig
 from lerobot.configs.types import NormalizationMode
@@ -156,6 +156,7 @@ class DiffusionConfig(PreTrainedConfig):
     prediction_type: str = "epsilon"
     clip_sample: bool = True
     clip_sample_range: float = 1.0
+    variance_type: str = "fixed_small"
 
     # Inference
     num_inference_steps: int | None = None
@@ -164,6 +165,7 @@ class DiffusionConfig(PreTrainedConfig):
     do_mask_loss_for_padding: bool = False
 
     # Training presets
+    optimizer_type: str = "adam"
     optimizer_lr: float = 1e-4
     optimizer_betas: tuple = (0.95, 0.999)
     optimizer_eps: float = 1e-8
@@ -198,6 +200,13 @@ class DiffusionConfig(PreTrainedConfig):
                 f"Got {self.noise_scheduler_type}."
             )
 
+        supported_optimizer_types = ["adam", "adamw"]
+        if self.optimizer_type not in supported_optimizer_types:
+            raise ValueError(
+                f"`optimizer_type` must be one of {supported_optimizer_types}. "
+                f"Got {self.optimizer_type}."
+            )
+        
         # Check that the horizon size and U-Net downsampling is compatible.
         # U-Net downsamples by 2 with each stage.
         downsampling_factor = 2 ** len(self.down_dims)
@@ -208,12 +217,20 @@ class DiffusionConfig(PreTrainedConfig):
             )
 
     def get_optimizer_preset(self) -> AdamConfig:
-        return AdamConfig(
-            lr=self.optimizer_lr,
-            betas=self.optimizer_betas,
-            eps=self.optimizer_eps,
-            weight_decay=self.optimizer_weight_decay,
-        )
+        if self.optimizer_type == "adam":
+            return AdamConfig(
+                lr=self.optimizer_lr,
+                betas=self.optimizer_betas,
+                eps=self.optimizer_eps,
+                weight_decay=self.optimizer_weight_decay,
+            )
+        elif self.optimizer_type == "adamw":
+            return AdamWConfig(
+                lr=self.optimizer_lr,
+                betas=self.optimizer_betas,
+                eps=self.optimizer_eps,
+                weight_decay=self.optimizer_weight_decay,
+            )
 
     def get_scheduler_preset(self) -> DiffuserSchedulerConfig:
         return DiffuserSchedulerConfig(

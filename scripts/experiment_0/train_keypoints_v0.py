@@ -31,7 +31,6 @@ def parse_args():
     parser.add_argument(
         "--output-dir", 
         type=str, 
-        default="../../outputs/train/diffusion_pusht_keypoints",
         help="Directory to save outputs"
     )
     parser.add_argument(
@@ -47,8 +46,7 @@ def parse_args():
     )
     parser.add_argument(
         "--hub-repo-id", 
-        type=str, 
-        default="the-future-dev/diffusion_pusht_keypoints",
+        type=str,
         help="Repository ID for pushing to Hub"
     )
     return parser.parse_args()
@@ -108,9 +106,13 @@ def main():
         beta_start=0.0001,
         beta_end=0.02,
         num_train_timesteps=100,
+        clip_sample=True,
+        clip_sample_range=1.0,
         prediction_type="epsilon",
+        variance_type="fixed_small",
 
         # Training hyperparameters
+        optimizer_type="adamw",
         optimizer_lr=1e-4,
         optimizer_betas=(0.95, 0.999),
         optimizer_eps=1e-8,
@@ -155,7 +157,7 @@ def main():
         env=env_config,
         policy=policy_config,
         output_dir=output_dir,
-        job_name="diffusion_pusht_keypoints_provileged",
+        job_name="keypoints_mlp",
         seed=args.seed,
         num_workers=4,
         batch_size=train_batch_size,

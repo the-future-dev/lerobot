@@ -12,7 +12,7 @@ from lerobot.scripts.eval import eval_policy
 from lerobot.common.policies.diffusion.modeling_diffusion import DiffusionPolicy
 from lerobot.common.envs.factory import make_env, make_env_config
 
-output_directory = Path("../../outputs/eval/diffusion_pusht_keypoints_check80k")
+output_directory = Path("../../outputs/eval/diffusion_pusht_keypoints_check130k_v0")
 output_directory.mkdir(parents=True, exist_ok=True)
 print(f"OUTPUT DIR: {output_directory}")
 
@@ -20,13 +20,13 @@ videos_dir = output_directory / "videos"
 videos_dir.mkdir(parents=True, exist_ok=True)
 
 device = "cuda"
-pretrained_policy_path = "../../outputs/train/diffusion_pusht_keypoints/checkpoints/080000/pretrained_model"
+pretrained_policy_path = "../../outputs/train/diffusion_pusht_keypoints/checkpoints/130000/pretrained_model"
 print(f"POLICY DIR: {pretrained_policy_path}")
 
 policy = DiffusionPolicy.from_pretrained(pretrained_policy_path)
 policy.to(device)
 
-# print(policy)
+# print(policy) 
 print("\n=== Policy Configuration ===")
 print(f"Input features: {policy.config.input_features}")
 print(f"Output features: {policy.config.output_features}")
@@ -37,7 +37,7 @@ print(f"Horizon: {policy.config.horizon}")
 
 n_envs = 50             # Number of parallel environments
 n_episodes = 500        # Total number of episodes to evaluate
-start_seed = 3912301    # Starting seed
+start_seed = 42    # Starting seed
 
 # Create a vectorized environment
 env_config = make_env_config(

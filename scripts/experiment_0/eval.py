@@ -1,3 +1,5 @@
+import argparse
+
 from pathlib import Path
 import json
 import numpy as np
@@ -12,7 +14,63 @@ from lerobot.scripts.eval import eval_policy
 from lerobot.common.policies.diffusion.modeling_diffusion import DiffusionPolicy
 from lerobot.common.envs.factory import make_env, make_env_config
 
-output_directory = Path("../../outputs/eval/diffusion_pusht_keypoints_check130k_v0")
+import os
+
+def get_wandb_key():    
+    WAND_TOKEN = os.getenv("WAND_TOKEN")
+    if not WAND_TOKEN:
+        raise ValueError(f"WAND_TOKEN not found")
+    return WAND_TOKEN
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Train a diffusion policy on PushT with keypoints")
+    parser.add_argument(
+        "--output-dir", 
+        type=str, 
+        help="Directory to save outputs"
+    )
+    parser.add_argument(
+        "--pretrained-path", 
+        type=str,
+        help="Random seed"
+    )
+    parser.add_argument(
+        "env-obs-type",
+        type=str,
+        help="Type of input / output expected from the simulation gym environment"
+    )
+    parser.add_argument(
+        "--n-envs", 
+        type=int, 
+        default=1, 
+        help="Number of Envs"
+    )
+    parser.add_argument(
+        "--n-episodes", 
+        type=int, 
+        default=1, 
+        help="Number of Episodes"
+    )
+    parser.add_argument(
+        "--n-videos", 
+        type=int, 
+        default=1, 
+        help="Number of Videos"
+    )
+    
+    parser.add_argument(
+        "--seed", 
+        type=int, 
+        default=42, 
+        help="Random seed"
+    )
+    
+    return parser.parse_args()
+
+
+args = parse_args()
+
+output_directory = Path("")
 output_directory.mkdir(parents=True, exist_ok=True)
 print(f"OUTPUT DIR: {output_directory}")
 
@@ -20,7 +78,7 @@ videos_dir = output_directory / "videos"
 videos_dir.mkdir(parents=True, exist_ok=True)
 
 device = "cuda"
-pretrained_policy_path = "../../outputs/train/diffusion_pusht_keypoints/checkpoints/130000/pretrained_model"
+pretrained_policy_path = args.pretrained_path
 print(f"POLICY DIR: {pretrained_policy_path}")
 
 policy = DiffusionPolicy.from_pretrained(pretrained_policy_path)
@@ -35,14 +93,14 @@ print(f"Observation steps: {policy.config.n_obs_steps}")
 print(f"Action steps: {policy.config.n_action_steps}")
 print(f"Horizon: {policy.config.horizon}")
 
-n_envs = 50             # Number of parallel environments
-n_episodes = 500        # Total number of episodes to evaluate
-start_seed = 42    # Starting seed
+n_envs = args.n_envs             # Number of parallel environments
+n_episodes = args.n_episodes        # Total number of episodes to evaluate
+start_seed = args.seed    # Starting seed
 
 # Create a vectorized environment
 env_config = make_env_config(
     env_type="pusht",
-    obs_type="environment_state_agent_pos",
+    obs_type=args.env_obs_type,
 )
 
 # Create the vectorized environment
@@ -60,7 +118,7 @@ eval_results = eval_policy(
     env=env,
     policy=policy,
     n_episodes=n_episodes,
-    max_episodes_rendered=1,  # Only render 1 video
+    max_episodes_rendered=args.n_videos,  # Only render 1 video
     videos_dir=videos_dir,
     return_episode_data=False,
     start_seed=start_seed,

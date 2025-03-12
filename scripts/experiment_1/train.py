@@ -29,9 +29,18 @@ def get_wandb_key():
 def parse_args():
     parser = argparse.ArgumentParser(description="Train a diffusion policy on PushT with keypoints")
     parser.add_argument(
+        "--job-name", 
+        type=str, 
+        help="Name of the job in Wandb"
+    )
+    parser.add_argument(
+        "--env-type", 
+        type=str, 
+        help="PushT Env Type"
+    )
+    parser.add_argument(
         "--output-dir", 
         type=str, 
-        default="../../outputs/train/diffusion_pusht_keypoints",
         help="Directory to save outputs"
     )
     parser.add_argument(
@@ -41,6 +50,11 @@ def parse_args():
         help="Random seed"
     )
     parser.add_argument(
+        "--dataset-repo-id", 
+        type=str, 
+        help="Repository ID for pushing to Hub"
+    )
+    parser.add_argument(
         "--push-to-hub", 
         action="store_true",
         help="Push trained model to Hugging Face Hub"
@@ -48,7 +62,6 @@ def parse_args():
     parser.add_argument(
         "--hub-repo-id", 
         type=str, 
-        default="",
         help="Repository ID for pushing to Hub"
     )
     return parser.parse_args()
@@ -57,21 +70,31 @@ def parse_args():
 def main():
     args = parse_args()
     init_logging()
+    wandb.login(key=get_wandb_key())
     logging.info("Starting training for Diffusion Policy with keypoints")
 
     # Define device
     device = "cuda" if torch.cuda.is_available() else "cpu"
     logging.info(f"Using device: {device}")
-    wandb.login(key=get_wandb_key())
-
-    # Define output directory
     output_dir = Path(args.output_dir)
+    
+    # Create environment config for evaluation
+    env_config = make_env_config(
+        env_type="pusht",
+        obs_type=args.env_type,
+    )
 
     # Define policy input and output features
     input_features = {
         "observation.state": PolicyFeature(type=FeatureType.STATE, shape=(2,)),
-        "observation.environment_state": PolicyFeature(type=FeatureType.ENV, shape=(32,))
     }
+
+    if args.env_type in ["environment_diff_state", "environment_state_agent_pos"]:
+        input_features["observation.environment_state"] = PolicyFeature(type=FeatureType.ENV, shape=(16,))
+    elif args.env_type == "environment_state_agent_pos_privileged":
+        input_features["observation.environment_state"] = PolicyFeature(type=FeatureType.ENV, shape=(32,))
+    elif args.env_type == "pixels_agent_pos":
+        input_features["pixels"] = PolicyFeature(type=FeatureType.VISUAL, shape=(384, 384, 3))
 
     output_features = {
         "action": PolicyFeature(type=FeatureType.ACTION, shape=(2,))
@@ -85,6 +108,31 @@ def main():
         "VISUAL": NormalizationMode.IDENTITY,
     }
 
+    encoder_vision_config = {}
+    encoder_states_config = {}
+
+    # Vision backbone.
+    if args.env_type == "pixels_agent_pos":
+        encoder_vision_config = {
+            "vision_backbone": "resnet18",
+            "crop_shape": (84, 84),
+            "crop_is_random": True,
+            "pretrained_backbone_weights": None,
+            "use_group_norm": True,
+            "spatial_softmax_num_keypoints": 32,
+            "use_separate_rgb_encoder_per_camera": False,
+        }
+
+    # Architecture / modeling.
+    # State encoder parameters
+    if args.env_type in ["environment_diff_state", "environment_state_agent_pos", "environment_state_agent_pos_privileged"]:
+        encoder_states_config = {
+            "state_backbone": "MLP",
+            "state_encoder_block_channels": [64, 128],
+            "state_encoder_feature_dim": 256,
+            "state_encoder_use_layernorm": True,
+        }
+    
     # Create the policy configuration
     policy_config = DiffusionConfig(
         # Inputs / output structure.
@@ -95,12 +143,9 @@ def main():
         output_features=output_features,
         normalization_mapping=normalization_mapping,
         
-        # Architecture / modeling.
-        # State encoder parameters
-        state_backbone="MLP",
-        state_encoder_block_channels=[64, 128],
-        state_encoder_feature_dim=256,
-        state_encoder_use_layernorm=True,
+        **encoder_vision_config,
+        **encoder_states_config,
+
         # Unet. => Default
         # Noise scheduler.
         noise_scheduler_type="DDPM",
@@ -132,15 +177,9 @@ def main():
         #     max_value: 0.9999
     )
 
-    # Create environment config for evaluation
-    env_config = make_env_config(
-        env_type="pusht",
-        obs_type="environment_state_agent_pos_privileged",
-    )
-
     # Create dataset config
     dataset_config = DatasetConfig(
-        repo_id="the-future-dev/pusht_keypoints_expanded"
+        repo_id=args.dataset_repo_id
     )
 
     # Create WandB config
@@ -158,16 +197,16 @@ def main():
 
     # Create training pipeline config
     train_batch_size = 256
-    train_steps = 150000
-    train_eval_freq = 5000
+    train_steps = 100000
+    train_eval_freq = 2500
     train_log_freq = 100
-    train_save_freq = 10000
+    train_save_freq = 5000
     train_config = TrainPipelineConfig(
         dataset=dataset_config,
         env=env_config,
         policy=policy_config,
         output_dir=output_dir,
-        job_name="diffusion_pusht_keypoints_expanded",
+        job_name=args.job_name,
         seed=args.seed,
         num_workers=4,
         batch_size=train_batch_size,
@@ -176,7 +215,7 @@ def main():
         log_freq=train_log_freq,
         save_checkpoint=True,
         save_freq=train_save_freq,
-        # use_policy_training_preset=True,
+        use_policy_training_preset=True,
         eval=eval_config,
         wandb=wandb_config,
     )
@@ -195,7 +234,7 @@ def main():
             )
             trained_policy.push_to_hub(
                 args.hub_repo_id,
-                commit_message="Trained diffusion policy on PushT with keypoints-> expanded to include target keypoint state",
+                commit_message="training complete :>",
                 private=False
             )
             logging.info("Successfully pushed model to Hub")

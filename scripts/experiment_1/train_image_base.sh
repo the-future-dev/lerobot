@@ -20,11 +20,11 @@ source_env
 
 module load Mambaforge/23.3.1-1-hpc1-bdist
 mamba activate lerobot
-python train_privileged_MLP.py \
-    --job-name keypoints_only_diff \
+python train.py \
+    --job-name image \
     --env-type pixels_agent_pos \
-    --output-dir ../../outputs/train/diffusion-pusht-keypoints-only-diff \
-    --dataset-repo-id the-future-dev/pusht-keypoints-only-diff\
-    --push-to-hub \ 
-    --hub-repo-id "the-future-dev/diffusion-pusht-keypoints-only-diff" \
+    --output-dir ../../outputs/train/diffusion-pusht-image \
+    --dataset-repo-id lerobot/pusht_image \
+    --push-to-hub \
+    --hub-repo-id the-future-dev/diffusion-pusht-image \
     --seed 42
